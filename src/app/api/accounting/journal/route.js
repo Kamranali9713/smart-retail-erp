@@ -13,11 +13,11 @@ export async function POST(req) {
     const description = String(body.description || "Manual journal entry").trim();
     const entries = Array.isArray(body.entries) ? body.entries : [];
     const result = await prisma.$transaction(async (tx) => {
-      const rows = await postJournalEntry(tx, { entries, description, refType: "MANUAL" });
-      await tx.auditLog.create({ data: { userId: auth.session.user.id, action: "CREATE", module: "accounting", metadata: { type: "journal", description, lines: rows.length } } });
-      return rows;
+      const posted = await postJournalEntry(tx, { entries, description, refType: "MANUAL", refId: body.refId || null });
+      await tx.auditLog.create({ data: { userId: auth.session.user.id, action: "CREATE", module: "accounting", entityId: posted.journalEntry.id, metadata: { type: "journal", entryNo: posted.journalEntry.entryNo, description, lines: posted.transactions.length, debitTotal: posted.debitTotal, creditTotal: posted.creditTotal } } });
+      return posted;
     });
-    return NextResponse.json({ success: true, entries: result }, { status: 201 });
+    return NextResponse.json({ success: true, journalEntry: result.journalEntry, entries: result.transactions, debitTotal: result.debitTotal, creditTotal: result.creditTotal }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error.message || "Unable to post journal entry" }, { status: 422 });
   }

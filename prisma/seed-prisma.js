@@ -98,7 +98,6 @@ async function main() {
   await prisma.purchaseItem.deleteMany();
   await prisma.purchase.deleteMany();
   await prisma.vendorPayment.deleteMany();
-  await prisma.customerPayment.deleteMany();
   await prisma.inventoryLog.deleteMany();
   await prisma.transaction.deleteMany();
   await prisma.income.deleteMany();
@@ -137,21 +136,6 @@ async function main() {
   const cancelledItems = [{productId:productList[9].id,quantity:4,unitCost:Number(productList[9].costPrice),total:4*Number(productList[9].costPrice)}];
   await prisma.purchase.create({data:{invoiceNo:"PUR-DEMO-CANCELLED",vendorId:vendors[9].id,userId:userMap.MANAGER.id,status:"CANCELLED",totalAmount:cancelledItems[0].total,paidAmount:0,items:{create:cancelledItems}}});
 
-  // Inventory alert scenarios for QA: one low-stock item and one out-of-stock item.
-  const lowStockDemo = products["HOU-0002"];
-  const outOfStockDemo = products["ELE-0002"];
-  const lowCurrent = await prisma.stock.findUnique({ where: { productId: lowStockDemo.id } });
-  if (lowCurrent && lowCurrent.quantity > 5) {
-    const delta = lowCurrent.quantity - 5;
-    await prisma.stock.update({ where: { productId: lowStockDemo.id }, data: { quantity: 5 } });
-    await prisma.inventoryLog.create({ data: { productId: lowStockDemo.id, action: "STOCK_OUT", quantity: delta, reason: "Demo physical count correction - low stock" } });
-  }
-  const outCurrent = await prisma.stock.findUnique({ where: { productId: outOfStockDemo.id } });
-  if (outCurrent && outCurrent.quantity > 0) {
-    await prisma.stock.update({ where: { productId: outOfStockDemo.id }, data: { quantity: 0 } });
-    await prisma.inventoryLog.create({ data: { productId: outOfStockDemo.id, action: "STOCK_OUT", quantity: outCurrent.quantity, reason: "Demo stock-out scenario" } });
-  }
-
   const accountDefs=[
     ["Cash","ASSET"],["Bank","ASSET"],["Inventory","ASSET"],["Accounts Receivable","ASSET"],["Accounts Payable","LIABILITY"],["Owner Equity","EQUITY"],["Sales Revenue","REVENUE"],["Other Income","REVENUE"],["Cost of Goods Sold","EXPENSE"],["Operating Expenses","EXPENSE"],["Utilities Expense","EXPENSE"],["Rent Expense","EXPENSE"]
   ];
@@ -173,10 +157,10 @@ async function main() {
   for(let i=0;i<12;i++){
     const p1=productList[i%productList.length], p2=productList[(i+3)%productList.length];
     const q1=2+(i%4), q2=1+(i%3); const s1=money(q1*Number(p1.sellingPrice)), s2=money(q2*Number(p2.sellingPrice));
-    const subtotal=money(s1+s2); const tax=money((s1*Number(p1.taxRate)/100)+(s2*Number(p2.taxRate)/100)); const total=money(subtotal+tax); const method=i%4===0?"CASH":i%4===1?"CARD":i%4===2?"BANK_TRANSFER":"CREDIT";
+    const subtotal=money(s1+s2); const tax=money((s1*Number(p1.taxRate)/100)+(s2*Number(p2.taxRate)/100)); const total=money(subtotal+tax); const method=i%3===0?"BANK_TRANSFER":i%3===1?"CARD":"CASH";
     const sale=await prisma.sale.create({data:{invoiceNo:`INV-DEMO-${String(i+1).padStart(4,"0")}`,customerId:customers[i%customers.length].id,userId:userMap.CASHIER.id,subtotal,taxAmount:tax,totalAmount:total,paymentMethod:method,status:"COMPLETED",items:{create:[{productId:p1.id,quantity:q1,unitPrice:p1.sellingPrice,total:s1},{productId:p2.id,quantity:q2,unitPrice:p2.sellingPrice,total:s2}]}}});
     for(const item of [{p:p1,q:q1},{p:p2,q:q2}]){await prisma.stock.update({where:{productId:item.p.id},data:{quantity:{decrement:item.q}}});await prisma.inventoryLog.create({data:{productId:item.p.id,action:"SALE",quantity:item.q,reason:`Sale ${sale.invoiceNo}`,refId:sale.id}});}
-    const cashAcct=method==="CREDIT"?accounts["Accounts Receivable"]:(method==="CASH"?accounts.Cash:accounts.Bank);
+    const cashAcct=method==="CASH"?accounts.Cash:accounts.Bank;
     const cost=money(q1*Number(p1.costPrice)+q2*Number(p2.costPrice));
     await prisma.transaction.createMany({data:[
       {accountId:cashAcct.id,type:"DEBIT",amount:total,description:`Sale ${sale.invoiceNo}`,refType:"SALE",refId:sale.id},
@@ -223,27 +207,11 @@ async function main() {
   const expenseDefs=[["Utilities Expense",4500],["Rent Expense",18000],["Operating Expenses",6200],["Operating Expenses",3100]];
   for(const [category,amount] of expenseDefs){const e=await prisma.expense.create({data:{category,amount,note:"Demo expense"}});const acct=accounts[category]||accounts["Operating Expenses"];await prisma.transaction.createMany({data:[{accountId:acct.id,type:"DEBIT",amount,description:category,refType:"EXPENSE",refId:e.id},{accountId:accounts.Cash.id,type:"CREDIT",amount,description:category,refType:"EXPENSE",refId:e.id}]});}
 
-  // Vendor payments + accounting. Payment records are separate from purchase.paidAmount so the payable ledger does not double-count initial payments.
+  // Vendor payments + accounting.
   const receivedPurchases=await prisma.purchase.findMany({orderBy:{createdAt:"asc"}});
-  const vendorPaymentPurchase=receivedPurchases.find(x=>Number(x.paidAmount)===0);
-  if (vendorPaymentPurchase) {
-    const paymentAmount=money(Number(vendorPaymentPurchase.totalAmount)*0.25);
-    const payment=await prisma.vendorPayment.create({data:{vendorId:vendorPaymentPurchase.vendorId,amount:paymentAmount,method:"CASH",note:`Demo follow-up payment for ${vendorPaymentPurchase.invoiceNo}`}});
-    await prisma.transaction.createMany({data:[
-      {accountId:accounts["Accounts Payable"].id,type:"DEBIT",amount:paymentAmount,description:`Vendor payment ${vendorPaymentPurchase.invoiceNo}`,refType:"VENDOR_PAYMENT",refId:payment.id},
-      {accountId:accounts.Cash.id,type:"CREDIT",amount:paymentAmount,description:`Vendor payment ${vendorPaymentPurchase.invoiceNo}`,refType:"VENDOR_PAYMENT",refId:payment.id}
-    ]});
-  }
-
-  // Demo customer receivable payment. Credit sales create Accounts Receivable; this payment reduces the balance.
-  const creditSale=await prisma.sale.findFirst({where:{invoiceNo:"INV-DEMO-004"}});
-  if (creditSale && creditSale.paymentMethod === "CREDIT") {
-    const paymentAmount=money(Number(creditSale.totalAmount)*0.4);
-    const payment=await prisma.customerPayment.create({data:{customerId:creditSale.customerId,amount:paymentAmount,method:"CASH",note:`Demo payment for ${creditSale.invoiceNo}`}});
-    await prisma.transaction.createMany({data:[
-      {accountId:accounts.Cash.id,type:"DEBIT",amount:paymentAmount,description:`Customer payment ${creditSale.invoiceNo}`,refType:"CUSTOMER_PAYMENT",refId:payment.id},
-      {accountId:accounts["Accounts Receivable"].id,type:"CREDIT",amount:paymentAmount,description:`Customer payment ${creditSale.invoiceNo}`,refType:"CUSTOMER_PAYMENT",refId:payment.id}
-    ]});
+  for(const p of receivedPurchases.filter(x=>Number(x.paidAmount)>0)){
+    const payment=await prisma.vendorPayment.create({data:{vendorId:p.vendorId,amount:p.paidAmount,method:"CASH",note:`Payment for ${p.invoiceNo}`}});
+    await prisma.transaction.createMany({data:[{accountId:accounts["Accounts Payable"].id,type:"DEBIT",amount:p.paidAmount,description:`Vendor payment ${p.invoiceNo}`,refType:"VENDOR_PAYMENT",refId:payment.id},{accountId:accounts.Cash.id,type:"CREDIT",amount:p.paidAmount,description:`Vendor payment ${p.invoiceNo}`,refType:"VENDOR_PAYMENT",refId:payment.id}]});
   }
 
   // Seed an opening capital entry so the balance sheet has a balancing equity source.

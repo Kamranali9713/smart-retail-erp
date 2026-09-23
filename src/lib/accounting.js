@@ -81,7 +81,9 @@ export async function postTransaction(tx, { account, accountId, type, amount, de
 export async function postSaleAccounting(tx, sale) {
   if (await hasPostedReference(tx, "SALE", sale.id)) return { posted: false, reason: "already-posted" };
 
-  const cashAccount = sale.paymentMethod === "BANK_TRANSFER" || sale.paymentMethod === "CARD" ? "Bank" : "Cash";
+  const cashAccount = sale.paymentMethod === "CREDIT"
+    ? "Accounts Receivable"
+    : (sale.paymentMethod === "BANK_TRANSFER" || sale.paymentMethod === "CARD" ? "Bank" : "Cash");
   const total = money(sale.totalAmount);
   const tax = money(sale.taxAmount);
   const netRevenue = money(Math.max(0, total - tax));
@@ -163,7 +165,9 @@ export async function getSaleCostOfGoods(tx, sale) {
 export async function postSaleReturnAccounting(tx, { sale, returnRecord, costOfGoods }) {
   if (await hasPostedReference(tx, "SALE_RETURN", returnRecord.id)) return { posted: false, reason: "already-posted" };
 
-  const cashAccount = sale.paymentMethod === "BANK_TRANSFER" || sale.paymentMethod === "CARD" ? "Bank" : "Cash";
+  const cashAccount = sale.paymentMethod === "CREDIT"
+    ? "Accounts Receivable"
+    : (sale.paymentMethod === "BANK_TRANSFER" || sale.paymentMethod === "CARD" ? "Bank" : "Cash");
   const amount = money(returnRecord.amount);
   if (amount <= 0) throw new Error("Return amount must be greater than zero");
 
@@ -304,6 +308,62 @@ export async function postPurchaseReturnAccounting(tx, { purchase, returnId, ref
   return { posted: true };
 }
 
+export async function getCustomerOutstanding(tx, customerId) {
+  const sales = await tx.sale.findMany({
+    where: { customerId, status: { in: ["COMPLETED", "RETURNED", "REFUNDED"] }, paymentMethod: "CREDIT" },
+    select: { totalAmount: true, returns: { select: { amount: true } } },
+  });
+  const payments = await tx.customerPayment.aggregate({
+    _sum: { amount: true },
+    where: { customerId },
+  });
+  const billed = sales.reduce((sum, sale) => {
+    const returned = sale.returns.reduce((r, item) => r + Number(item.amount), 0);
+    return sum + Math.max(0, Number(sale.totalAmount) - returned);
+  }, 0);
+  return money(Math.max(0, billed - Number(payments._sum.amount || 0)));
+}
+
+export async function postCustomerPaymentAccounting(tx, payment) {
+  if (await hasPostedReference(tx, "CUSTOMER_PAYMENT", payment.id)) return { posted: false, reason: "already-posted" };
+  const amount = money(payment.amount);
+  if (amount <= 0) throw new Error("Customer payment amount must be greater than zero");
+  const account = payment.method === "BANK_TRANSFER" || payment.method === "CARD" ? "Bank" : "Cash";
+
+  await postTransaction(tx, {
+    account: account,
+    type: "DEBIT",
+    amount,
+    description: `Customer payment ${payment.id}`,
+    refType: "CUSTOMER_PAYMENT",
+    refId: payment.id,
+  });
+  await postTransaction(tx, {
+    account: "Accounts Receivable",
+    type: "CREDIT",
+    amount,
+    description: `Customer payment ${payment.id}`,
+    refType: "CUSTOMER_PAYMENT",
+    refId: payment.id,
+  });
+  return { posted: true };
+}
+
+export async function getVendorOutstanding(tx, vendorId) {
+  const [purchases, payments] = await Promise.all([
+    tx.purchase.findMany({
+      where: { vendorId, status: "RECEIVED" },
+      select: { totalAmount: true, paidAmount: true },
+    }),
+    tx.vendorPayment.aggregate({
+      _sum: { amount: true },
+      where: { vendorId },
+    }),
+  ]);
+  const purchaseDue = purchases.reduce((sum, purchase) => sum + Math.max(0, Number(purchase.totalAmount) - Number(purchase.paidAmount)), 0);
+  return money(Math.max(0, purchaseDue - Number(payments._sum.amount || 0)));
+}
+
 export async function postVendorPaymentAccounting(tx, payment) {
   if (await hasPostedReference(tx, "VENDOR_PAYMENT", payment.id)) return { posted: false, reason: "already-posted" };
   const amount = money(payment.amount);
@@ -331,23 +391,56 @@ export async function postVendorPaymentAccounting(tx, payment) {
 
 export async function postJournalEntry(tx, { entries, description, refType = "MANUAL", refId = null }) {
   if (!Array.isArray(entries) || entries.length < 2) throw new Error("A journal entry requires at least two lines");
+
   const normalized = entries.map((entry) => ({
     accountId: entry.accountId,
     type: entry.type,
     amount: money(entry.amount),
   }));
+
   if (normalized.some((entry) => !entry.accountId || !["DEBIT", "CREDIT"].includes(entry.type) || !Number.isFinite(entry.amount) || entry.amount <= 0)) {
     throw new Error("Every journal line requires an account, DEBIT/CREDIT type, and positive amount");
   }
+
   const debits = money(normalized.filter((entry) => entry.type === "DEBIT").reduce((sum, entry) => sum + entry.amount, 0));
   const credits = money(normalized.filter((entry) => entry.type === "CREDIT").reduce((sum, entry) => sum + entry.amount, 0));
-  if (Math.abs(debits - credits) > 0.005) throw new Error("Journal entry is not balanced: total debits must equal total credits");
-  return Promise.all(normalized.map((entry) => postTransaction(tx, {
-    accountId: entry.accountId,
-    type: entry.type,
-    amount: entry.amount,
-    description,
-    refType,
-    refId,
-  })));
+
+  if (Math.abs(debits - credits) > 0.005) {
+    throw new Error("Journal entry is not balanced: total debits must equal total credits");
+  }
+
+  // A manual journal is grouped under one immutable journal header so all
+  // lines can be traced together from the General Ledger.
+  const count = await tx.journalEntry.count();
+  const entryNo = `JE-${String(count + 1).padStart(6, "0")}`;
+  const journal = await tx.journalEntry.create({
+    data: {
+      entryNo,
+      description: description || "Manual journal entry",
+      refType,
+      refId,
+    },
+  });
+
+  const rows = [];
+  for (const entry of normalized) {
+    const row = await postTransaction(tx, {
+      accountId: entry.accountId,
+      type: entry.type,
+      amount: entry.amount,
+      description,
+      refType,
+      refId,
+    });
+
+    if (row) {
+      const linked = await tx.transaction.update({
+        where: { id: row.id },
+        data: { journalEntryId: journal.id },
+      });
+      rows.push(linked);
+    }
+  }
+
+  return { journalEntry: journal, transactions: rows, debitTotal: debits, creditTotal: credits };
 }

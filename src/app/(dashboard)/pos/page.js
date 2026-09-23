@@ -11,12 +11,15 @@ export default function POSPage() {
   const [discountAmount, setDiscountAmount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [heldSales, setHeldSales] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [customerId, setCustomerId] = useState("");
   const [lastReceipt, setLastReceipt] = useState(null);
   const searchRef = useRef(null);
 
   useEffect(() => {
     searchRef.current?.focus();
     loadHeld();
+    fetch("/api/customers").then((r) => r.ok ? r.json() : []).then(setCustomers);
   }, []);
 
   useEffect(() => {
@@ -78,6 +81,10 @@ export default function POSPage() {
 
   async function checkout(status = "COMPLETED") {
     if (cart.length === 0) return;
+    if (paymentMethod === "CREDIT" && !customerId) {
+      alert("Select a customer before using Credit payment.");
+      return;
+    }
     const res = await fetch("/api/sales", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -86,6 +93,7 @@ export default function POSPage() {
         discountPct,
         discountAmount,
         paymentMethod,
+        customerId: customerId || null,
         status,
       }),
     });
@@ -100,6 +108,8 @@ export default function POSPage() {
     setCart([]);
     setDiscountPct(0);
     setDiscountAmount(0);
+    setCustomerId("");
+    setPaymentMethod("CASH");
     loadHeld();
   }
 
@@ -250,6 +260,22 @@ export default function POSPage() {
         </div>
 
         <div>
+          <label className="text-sm font-medium">Customer</label>
+          <select
+            value={customerId}
+            onChange={(e) => setCustomerId(e.target.value)}
+            className="w-full mt-1 border border-border rounded-md px-3 py-2 bg-background"
+          >
+            <option value="">Walk-in Customer</option>
+            {customers.map((customer) => (
+              <option key={customer.id} value={customer.id}>
+                {customer.name}{Number(customer.outstanding || 0) > 0 ? ` — Due ${formatCurrency(customer.outstanding)}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
           <label className="text-sm font-medium">Payment Method</label>
           <select
             value={paymentMethod}
@@ -259,6 +285,7 @@ export default function POSPage() {
             <option value="CASH">Cash</option>
             <option value="CARD">Card</option>
             <option value="BANK_TRANSFER">Bank Transfer</option>
+            <option value="CREDIT">Credit / Customer Due</option>
           </select>
         </div>
 

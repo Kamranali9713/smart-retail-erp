@@ -7,8 +7,21 @@ import { customerSchema, validate } from "@/lib/validation";
 export async function GET() {
   const s = await getServerSession(authOptions);
   if (!hasPermission(s, "customers", "view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const rows = await prisma.customer.findMany({ include: { _count: { select: { sales: true } } }, orderBy: { createdAt: "desc" } });
-  return NextResponse.json(rows);
+  const rows = await prisma.customer.findMany({
+    include: {
+      _count: { select: { sales: true, payments: true } },
+      sales: { where: { status: { in: ["COMPLETED", "RETURNED", "REFUNDED"] }, paymentMethod: "CREDIT" }, include: { returns: true } },
+      payments: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const result = rows.map((customer) => {
+    const billed = customer.sales.reduce((sum, sale) => sum + Math.max(0, Number(sale.totalAmount) - sale.returns.reduce((r, item) => r + Number(item.amount), 0)), 0);
+    const paid = customer.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const { sales, payments, ...rest } = customer;
+    return { ...rest, billed, paid, outstanding: Math.max(0, billed - paid) };
+  });
+  return NextResponse.json(result);
 }
 
 export async function POST(req) {

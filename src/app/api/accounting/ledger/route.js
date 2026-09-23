@@ -28,6 +28,7 @@ function serializeTransaction(row) {
     createdAt: row.createdAt,
     accountId: row.accountId,
     account: row.account ? { id: row.account.id, name: row.account.name, type: row.account.type } : null,
+    journalEntry: row.journalEntry ? { id: row.journalEntry.id, entryNo: row.journalEntry.entryNo, description: row.journalEntry.description } : null,
     type: row.type,
     amount: Number(row.amount),
     description: row.description,
@@ -67,10 +68,10 @@ export async function GET(req) {
     };
 
     const [transactions, accounts, openingRows, balanceRows, periodRows, filteredCount] = await Promise.all([
-      prisma.transaction.findMany({ where, include: { account: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: limit }),
+      prisma.transaction.findMany({ where, include: { account: true, journalEntry: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: limit }),
       prisma.account.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] }),
       prisma.transaction.findMany({ where: beforeWhere, select: { accountId: true, type: true, amount: true } }),
-      prisma.transaction.findMany({ where: periodWhere, include: { account: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+      prisma.transaction.findMany({ where: periodWhere, include: { account: true, journalEntry: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
       prisma.transaction.findMany({ where: periodWhere, select: { accountId: true, type: true, amount: true } }),
       prisma.transaction.count({ where }),
     ]);

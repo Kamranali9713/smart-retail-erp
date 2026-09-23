@@ -1,4 +1,95 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/rbac";
-export async function POST(req){const a=await requirePermission("inventory","edit");if(a.response)return a.response;const b=await req.json();try{const result=await prisma.$transaction(async tx=>{const stock=await tx.stock.findUnique({where:{productId:b.productId}});if(!stock)throw new Error("Stock record not found");let newQty=stock.quantity;const qty=Number(b.quantity);if(qty<0)throw new Error("Quantity cannot be negative");if(b.action==="STOCK_IN")newQty+=qty;else if(b.action==="STOCK_OUT")newQty-=qty;else newQty=qty;if(newQty<0)throw new Error("Insufficient stock");await tx.stock.update({where:{productId:b.productId},data:{quantity:newQty}});const log=await tx.inventoryLog.create({data:{productId:b.productId,action:b.action,quantity:qty,reason:b.reason||null}});return {quantity:newQty,log}});return NextResponse.json({success:true,...result})}catch(e){return NextResponse.json({error:e.message},{status:400})}}
+import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+
+const adjustmentSchema = z.object({
+  productId: z.string().min(1),
+  action: z.enum(["STOCK_IN", "STOCK_OUT"]),
+  quantity: z.coerce.number().int().min(0).max(100000000),
+  reason: z.string().trim().max(500).optional().or(z.literal("")),
+});
+
+export async function POST(req) {
+  const auth = await requirePermission("inventory", "edit");
+  if (auth.response) return auth.response;
+
+  try {
+    const body = adjustmentSchema.parse(await req.json());
+
+    if (body.quantity === 0) {
+      return NextResponse.json({ error: "Quantity must be greater than zero" }, { status: 422 });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const product = await tx.product.findUnique({
+        where: { id: body.productId },
+        include: { stock: true },
+      });
+
+      if (!product || !product.isActive) {
+        throw new Error("Product not found or inactive");
+      }
+
+      const currentQty = product.stock?.quantity || 0;
+      let newQty;
+
+      if (body.action === "STOCK_IN") {
+        newQty = currentQty + body.quantity;
+      } else if (body.action === "STOCK_OUT") {
+        newQty = currentQty - body.quantity;
+      }
+
+      if (newQty < 0) {
+        throw new Error(`Insufficient stock. Available quantity: ${currentQty}`);
+      }
+
+      const stock = await tx.stock.upsert({
+        where: { productId: body.productId },
+        create: { productId: body.productId, quantity: newQty },
+        update: { quantity: newQty },
+      });
+
+      const log = await tx.inventoryLog.create({
+        data: {
+          productId: body.productId,
+          action: body.action,
+          quantity: body.quantity,
+          reason: body.reason || null,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: auth.session.user.id,
+          action: "STOCK_CHANGE",
+          module: "inventory",
+          entityId: body.productId,
+          metadata: {
+            productName: product.name,
+            action: body.action,
+            quantity: body.quantity,
+            previousQuantity: currentQty,
+            newQuantity: newQty,
+            reason: body.reason || null,
+          },
+        },
+      });
+
+      return { stock, log, previousQuantity: currentQty };
+    });
+
+    return NextResponse.json({
+      success: true,
+      quantity: result.stock.quantity,
+      previousQuantity: result.previousQuantity,
+      log: result.log,
+    });
+  } catch (error) {
+    if (error?.name === "ZodError") {
+      return NextResponse.json({ error: "Invalid stock adjustment", issues: error.issues }, { status: 422 });
+    }
+
+    return NextResponse.json({ error: error.message || "Unable to adjust stock" }, { status: 400 });
+  }
+}

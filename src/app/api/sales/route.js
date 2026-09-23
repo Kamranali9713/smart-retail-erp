@@ -4,8 +4,11 @@ import { generateInvoiceNo } from "@/lib/utils";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { postSaleAccounting } from "@/lib/accounting";
+import { requirePermission } from "@/lib/rbac";
 
 export async function GET(req) {
+  const auth = await requirePermission("pos", "view");
+  if (auth.response) return auth.response;
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
   const sales = await prisma.sale.findMany({
@@ -20,10 +23,14 @@ export async function GET(req) {
 // body: { items: [{productId, quantity, unitPrice}], discountAmount, discountPct, paymentMethod, customerId, status ('COMPLETED'|'HELD') }
 export async function POST(req) {
   const session = await getServerSession(authOptions);
+  const auth = await requirePermission("pos", "create");
+  if (auth.response) return auth.response;
   const body = await req.json();
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      const paymentMethod = body.paymentMethod || "CASH";
+      if (paymentMethod === "CREDIT" && !body.customerId) throw new Error("Customer is required for a credit sale");
       const subtotal = body.items.reduce((acc, i) => acc + i.quantity * i.unitPrice, 0);
 
       let taxAmount = 0;
@@ -51,7 +58,7 @@ export async function POST(req) {
           discountPct: body.discountPct || 0,
           taxAmount,
           totalAmount,
-          paymentMethod: body.paymentMethod || "CASH",
+          paymentMethod,
           status: body.status || "COMPLETED",
           items: {
             create: body.items.map((i) => ({

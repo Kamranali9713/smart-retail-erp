@@ -18,6 +18,7 @@ export const NAV_ITEMS = [
   { href: "/vendors", label: "Vendors", module: "vendors" },
   { href: "/accounting", label: "Accounting", module: "accounting" },
   { href: "/accounting/ledger", label: "General Ledger", module: "accounting" },
+  { href: "/accounting/trial-balance", label: "Trial Balance", module: "accounting" },
   { href: "/accounting/accounts", label: "Chart of Accounts", module: "accounting" },
   { href: "/accounting/reports", label: "Financial Statements", module: "accounting" },
   { href: "/reports", label: "Reports", module: "reports" },

@@ -44,20 +44,20 @@ model Permission {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String
-  email         String    @unique
-  password      String
-  roleId        String
-  role          Role      @relation(fields: [roleId], references: [id])
-  isActive      Boolean   @default(true)
-  lastLoginAt   DateTime?
-  loginLogs     LoginLog[]
-  auditLogs     AuditLog[]
-  sales         Sale[]
-  purchases     Purchase[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id          String     @id @default(cuid())
+  name        String
+  email       String     @unique
+  password    String
+  roleId      String
+  role        Role       @relation(fields: [roleId], references: [id])
+  isActive    Boolean    @default(true)
+  lastLoginAt DateTime?
+  loginLogs   LoginLog[]
+  auditLogs   AuditLog[]
+  sales       Sale[]
+  purchases   Purchase[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 }
 
 model LoginLog {
@@ -71,14 +71,14 @@ model LoginLog {
 }
 
 model AuditLog {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id])
-  action     String // CREATE | UPDATE | DELETE | LOGIN | LOGOUT | SALE | PURCHASE | STOCK_CHANGE
-  module     String
-  entityId   String?
-  metadata   Json?
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String // CREATE | UPDATE | DELETE | LOGIN | LOGOUT | SALE | PURCHASE | STOCK_CHANGE
+  module    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
 }
 
 // ----------------------------------------------------------------
@@ -100,37 +100,37 @@ model Brand {
 }
 
 model Unit {
-  id        String    @id @default(cuid())
-  name      String    @unique // pcs, kg, box, litre
-  products  Product[]
+  id       String    @id @default(cuid())
+  name     String    @unique // pcs, kg, box, litre
+  products Product[]
 }
 
 model Product {
-  id            String        @id @default(cuid())
+  id            String           @id @default(cuid())
   name          String
-  sku           String        @unique
-  barcode       String?       @unique
+  sku           String           @unique
+  barcode       String?          @unique
   description   String?
-  images        String[]      @default([])
+  images        String[]         @default([])
   categoryId    String?
-  category      Category?     @relation(fields: [categoryId], references: [id])
+  category      Category?        @relation(fields: [categoryId], references: [id])
   brandId       String?
-  brand         Brand?        @relation(fields: [brandId], references: [id])
+  brand         Brand?           @relation(fields: [brandId], references: [id])
   unitId        String?
-  unit          Unit?         @relation(fields: [unitId], references: [id])
-  costPrice     Decimal       @default(0) @db.Decimal(12, 2)
-  sellingPrice  Decimal       @default(0) @db.Decimal(12, 2)
-  taxRate       Decimal       @default(0) @db.Decimal(5, 2)
-  lowStockAlert Int           @default(10)
+  unit          Unit?            @relation(fields: [unitId], references: [id])
+  costPrice     Decimal          @default(0) @db.Decimal(12, 2)
+  sellingPrice  Decimal          @default(0) @db.Decimal(12, 2)
+  taxRate       Decimal          @default(0) @db.Decimal(5, 2)
+  lowStockAlert Int              @default(10)
   expiryDate    DateTime?
-  isActive      Boolean       @default(true)
+  isActive      Boolean          @default(true)
   variants      ProductVariant[]
   stock         Stock?
   inventoryLogs InventoryLog[]
   saleItems     SaleItem[]
   purchaseItems PurchaseItem[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 }
 
 model ProductVariant {
@@ -143,12 +143,12 @@ model ProductVariant {
 }
 
 model Stock {
-  id             String   @id @default(cuid())
-  productId      String   @unique
-  product        Product  @relation(fields: [productId], references: [id])
-  quantity       Int      @default(0)
-  reservedQty    Int      @default(0)
-  updatedAt      DateTime @updatedAt
+  id          String   @id @default(cuid())
+  productId   String   @unique
+  product     Product  @relation(fields: [productId], references: [id])
+  quantity    Int      @default(0)
+  reservedQty Int      @default(0)
+  updatedAt   DateTime @updatedAt
 }
 
 enum InventoryAction {
@@ -161,14 +161,14 @@ enum InventoryAction {
 }
 
 model InventoryLog {
-  id        String           @id @default(cuid())
+  id        String          @id @default(cuid())
   productId String
-  product   Product          @relation(fields: [productId], references: [id])
+  product   Product         @relation(fields: [productId], references: [id])
   action    InventoryAction
   quantity  Int
   reason    String?
   refId     String? // linked sale/purchase id
-  createdAt DateTime         @default(now())
+  createdAt DateTime        @default(now())
 }
 
 // ----------------------------------------------------------------
@@ -176,15 +176,15 @@ model InventoryLog {
 // ----------------------------------------------------------------
 
 model Vendor {
-  id          String     @id @default(cuid())
-  name        String
-  contact     String?
-  email       String?
-  address     String?
-  status      String     @default("ACTIVE") // ACTIVE | INACTIVE
-  purchases   Purchase[]
-  payments    VendorPayment[]
-  createdAt   DateTime   @default(now())
+  id        String          @id @default(cuid())
+  name      String
+  contact   String?
+  email     String?
+  address   String?
+  status    String          @default("ACTIVE") // ACTIVE | INACTIVE
+  purchases Purchase[]
+  payments  VendorPayment[]
+  createdAt DateTime        @default(now())
 }
 
 enum PurchaseStatus {
@@ -195,17 +195,17 @@ enum PurchaseStatus {
 }
 
 model Purchase {
-  id            String         @id @default(cuid())
-  invoiceNo     String         @unique
-  vendorId      String
-  vendor        Vendor         @relation(fields: [vendorId], references: [id])
-  userId        String
-  user          User           @relation(fields: [userId], references: [id])
-  status        PurchaseStatus @default(PENDING)
-  items         PurchaseItem[]
-  totalAmount   Decimal        @default(0) @db.Decimal(12, 2)
-  paidAmount    Decimal        @default(0) @db.Decimal(12, 2)
-  createdAt     DateTime       @default(now())
+  id          String         @id @default(cuid())
+  invoiceNo   String         @unique
+  vendorId    String
+  vendor      Vendor         @relation(fields: [vendorId], references: [id])
+  userId      String
+  user        User           @relation(fields: [userId], references: [id])
+  status      PurchaseStatus @default(PENDING)
+  items       PurchaseItem[]
+  totalAmount Decimal        @default(0) @db.Decimal(12, 2)
+  paidAmount  Decimal        @default(0) @db.Decimal(12, 2)
+  createdAt   DateTime       @default(now())
 }
 
 model PurchaseItem {
@@ -234,13 +234,24 @@ model VendorPayment {
 // ----------------------------------------------------------------
 
 model Customer {
-  id        String   @id @default(cuid())
+  id        String            @id @default(cuid())
   name      String
   phone     String?
   email     String?
   address   String?
   sales     Sale[]
-  createdAt DateTime @default(now())
+  payments  CustomerPayment[]
+  createdAt DateTime          @default(now())
+}
+
+model CustomerPayment {
+  id         String        @id @default(cuid())
+  customerId String
+  customer   Customer      @relation(fields: [customerId], references: [id])
+  amount     Decimal       @db.Decimal(12, 2)
+  method     PaymentMethod
+  note       String?
+  createdAt  DateTime      @default(now())
 }
 
 enum SaleStatus {
@@ -254,6 +265,7 @@ enum PaymentMethod {
   CASH
   CARD
   BANK_TRANSFER
+  CREDIT
 }
 
 model Sale {
@@ -308,24 +320,43 @@ enum AccountType {
 }
 
 model Account {
-  id          String        @id @default(cuid())
-  name        String        @unique
-  type        AccountType
-  balance     Decimal       @default(0) @db.Decimal(14, 2)
+  id           String        @id @default(cuid())
+  name         String        @unique
+  type         AccountType
+  balance      Decimal       @default(0) @db.Decimal(14, 2)
   transactions Transaction[]
-  createdAt   DateTime      @default(now())
+  createdAt    DateTime      @default(now())
+}
+
+model JournalEntry {
+  id           String        @id @default(cuid())
+  entryNo      String        @unique
+  description  String?
+  refType      String?
+  refId        String?
+  createdAt    DateTime      @default(now())
+  transactions Transaction[]
+
+  @@index([createdAt])
+  @@index([refType, refId])
 }
 
 model Transaction {
-  id          String   @id @default(cuid())
-  accountId   String
-  account     Account  @relation(fields: [accountId], references: [id])
-  type        String // DEBIT | CREDIT
-  amount      Decimal  @db.Decimal(14, 2)
-  description String?
-  refType     String? // SALE | PURCHASE | MANUAL | EXPENSE | INCOME
-  refId       String?
-  createdAt   DateTime @default(now())
+  id             String        @id @default(cuid())
+  accountId      String
+  account        Account       @relation(fields: [accountId], references: [id])
+  journalEntryId String?
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+  type           String // DEBIT | CREDIT
+  amount         Decimal       @db.Decimal(14, 2)
+  description    String?
+  refType        String? // SALE | PURCHASE | MANUAL | EXPENSE | INCOME
+  refId          String?
+  createdAt      DateTime      @default(now())
+
+  @@index([accountId, createdAt])
+  @@index([refType, refId])
+  @@index([journalEntryId])
 }
 
 model Income {
@@ -349,17 +380,17 @@ model Expense {
 // ----------------------------------------------------------------
 
 model Settings {
-  id                 String  @id @default("singleton")
-  storeName          String  @default("My Store")
-  logoUrl            String?
-  address            String?
-  phone              String?
-  email              String?
-  defaultTaxRate     Decimal @default(0) @db.Decimal(5, 2)
-  receiptWidth       String  @default("80mm") // 58mm | 80mm
-  lowStockThreshold  Int     @default(10)
-  autoBarcode        Boolean @default(true)
-  updatedAt          DateTime @updatedAt
+  id                String   @id @default("singleton")
+  storeName         String   @default("My Store")
+  logoUrl           String?
+  address           String?
+  phone             String?
+  email             String?
+  defaultTaxRate    Decimal  @default(0) @db.Decimal(5, 2)
+  receiptWidth      String   @default("80mm") // 58mm | 80mm
+  lowStockThreshold Int      @default(10)
+  autoBarcode       Boolean  @default(true)
+  updatedAt         DateTime @updatedAt
 }
 
 model Backup {

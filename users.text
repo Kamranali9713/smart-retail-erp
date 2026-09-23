@@ -1,0 +1,63 @@
+[
+  {
+    id: 'cmub42dg80016gre8u250rb5t',
+    name: 'Super Admin',
+    email: 'admin@smartretail.local',
+    isActive: true,
+    role: { name: 'SUPER_ADMIN', label: 'Super Admin' }
+  },
+  {
+    id: 'cmub6u18100018vfv2u7dab6f',
+    name: 'Manager User',
+    email: 'manager@smartretail.local',
+    isActive: true,
+    role: { name: 'MANAGER', label: 'Manager' }
+  },
+  {
+    id: 'cmub6unsl00038vfviy8lhb46',
+    name: 'Cashier User',
+    email: 'cashier@smartretail.local',
+    isActive: true,
+    role: { name: 'CASHIER', label: 'Cashier' }
+  },
+  {
+    id: 'cmub6v3sc00058vfvn6zkv64i',
+    name: 'Accountant User',
+    email: 'accountant@smartretail.local',
+    isActive: true,
+    role: { name: 'ACCOUNTANT', label: 'Accountant' }
+  },
+  {
+    id: 'cmub6virl00078vfv3rw9618b',
+    name: 'Inventory User',
+    email: 'inventory@smartretail.local',
+    isActive: true,
+    role: { name: 'INVENTORY_STAFF', label: 'Inventory Staff' }
+  }
+]
+> 
+
+
+
+SUPER ADMIN
+Email:    admin@smartretail.local
+Password: Admin@123
+
+MANAGER
+Email:    manager@smartretail.local
+Password: Manager@123
+
+CASHIER
+Email:    cashier@smartretail.local
+Password: Cashier@123
+
+ACCOUNTANT
+Email:    accountant@smartretail.local
+Password: Accountant@123
+
+INVENTORY STAFF
+Email:    inventory@smartretail.local
+Password: Inventory@123
+
+
+DATABASE_URL="postgresql://postgres:btc123@localhost:5432/smart_retail?schema=public"

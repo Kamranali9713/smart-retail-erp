@@ -1,0 +1,14 @@
+PHASE 5 APPLY
+
+Apply these files over the Phase 4 project.
+
+Then run:
+  npm install
+  npx prisma generate
+  npm run prisma:seed
+  npm run dev
+
+No Prisma migration is required for Phase 5.
+
+Health check:
+  http://localhost:3000/api/health

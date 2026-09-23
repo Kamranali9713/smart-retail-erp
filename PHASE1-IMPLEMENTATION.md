@@ -738,3 +738,98 @@ npm run dev
 7. Confirm Total Debit equals Total Credit and status is Balanced.
 8. Export Trial Balance CSV.
 
+
+
+-------- Phase 5 -----------------
+# Phase 5 — Automatic Accounting Updates
+
+Apply these changes over the Phase 4 project.
+
+## Included
+- Automatic accounting posting for completed POS sales.
+- Credit sales post to Accounts Receivable.
+- Automatic COGS and inventory accounting on sales.
+- Automatic accounting reversal for sales returns.
+- Automatic inventory/accounting updates when purchases are received.
+- Automatic purchase payable/cash/bank postings.
+- Automatic customer payment posting against Accounts Receivable.
+- Automatic vendor payment posting against Accounts Payable.
+- Automatic income posting.
+- Automatic expense posting.
+- Accounting reconciliation/repair API for existing business records.
+- Duplicate-posting protection using reference IDs.
+- Audit logging for accounting-triggering operations.
+
+## Apply
+Extract the ZIP into the Phase 4 project root and replace/add the files.
+
+No new Prisma migration is required by Phase 5.
+
+Then run:
+
+npm install
+npx prisma generate
+npm run prisma:seed
+npm run dev
+
+## Reconciliation API
+POST /api/accounting/reconcile
+
+Body:
+{"repair":true}
+
+This scans existing completed sales, returns, received purchases, customer/vendor payments, income, and expenses and repairs missing accounting postings without duplicating already-posted references.
+
+-------------   Phase 6 --------------
+# Phase 6 — POS Completion + Returns
+
+Apply this ZIP on top of the Phase 5 project.
+
+## Changed files
+
+- `src/app/(dashboard)/pos/page.js`
+- `src/app/api/sales/route.js`
+- `src/app/api/sales/[id]/resume/route.js`
+- `src/app/api/sales/[id]/return/route.js`
+
+## Changes
+
+- Added customer selection to POS.
+- Added recent completed sales list.
+- Added full-sale return UI and confirmation dialog.
+- Return restores all returned items to stock.
+- Return creates inventory ledger entries.
+- Return now uses the existing `postSaleReturnAccounting()` service so revenue, tax, cash/bank, inventory and COGS are reversed consistently.
+- Added audit logs for sales, held sales, resumed sales and returns.
+- Added POS permission checks to sales GET/POST.
+- Server now treats product selling price and tax rate as authoritative instead of trusting client-supplied unit prices.
+- Added server-side product availability and stock validation.
+- Prevented duplicate product lines by merging quantities.
+- Prevented discount values from exceeding the subtotal.
+- Improved held-sale and resume flow.
+- Added out-of-stock prevention in the POS UI.
+- Added available-stock quantity limits in the POS UI.
+- Added busy-state protection to reduce duplicate checkout/return submissions.
+- Added payment method and customer data to sales history.
+- No Prisma schema changes are required.
+
+## Important limitation
+
+Phase 6 implements **complete-sale returns**. Partial item/quantity returns are intentionally rejected. Partial returns can be added as a later enhancement with item-level return quantities and corresponding proportional accounting.
+
+## Apply
+
+Extract this ZIP into the Phase 5 project root and replace the files while preserving directories.
+
+Then run:
+
+```bash
+npx prisma generate
+npm run prisma:seed
+npm run dev
+```
+
+No migration is required for this phase.
+
+
+
